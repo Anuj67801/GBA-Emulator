@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GBA Emulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --panel: #16161f;
+    --border: #2a2a3a;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --glow: #7c3aed88;
+    --text: #e2e0f0;
+    --muted: #6b6880;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --yellow: #eab308;
+    --green: #22c55e;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 400px;
+    background: radial-gradient(ellipse, #7c3aed22 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    border-bottom: 1px solid var(--border);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 13px;
+    color: var(--accent2);
+    text-shadow: 0 0 20px var(--glow), 0 0 40px var(--glow);
+    letter-spacing: 2px;
+  }
+
+  .logo span { color: var(--text); }
+
+  .header-badge {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 4px;
+  }
+
+  .main {
+    position: relative;
+    z-index: 10;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 28px;
+    align-items: start;
+  }
+
+  .screen-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 60px rgba(124,58,237,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .screen-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+  }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.r { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .dot.y { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .dot.g { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  .screen-title {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .emulator-container {
+    position: relative;
+    background: #000;
+    min-height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #game-container {
+    width: 100%;
+    min-height: 480px;
+  }
+
+  .drop-zone {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .drop-zone:hover { background: rgba(124,58,237,0.05); }
+  .drop-zone.drag-over { background: rgba(124,58,237,0.12); border: 2px dashed var(--accent2); }
+
+  .drop-icon {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 32px;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .drop-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    text-align: center;
+    line-height: 1.8;
+    text-shadow: 0 0 15px var(--glow);
+  }
+
+  .drop-sub {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 2px;
+  }
+
+  .drop-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 0 20px var(--glow);
+  }
+
+  .drop-btn:hover {
+    background: var(--accent2);
+    box-shadow: 0 0 30px var(--glow);
+    transform: translateY(-2px);
+  }
+
+  #file-input { display: none; }
+
+  .controls-bar {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    flex-wrap: wrap;
+  }
+
+  .ctrl-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(124,58,237,0.1);
+  }
+
+  .ctrl-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--glow);
+  }
+
+  .ctrl-btn.primary:hover {
+    background: var(--accent2);
+    border-color: var(--accent2);
+  }
+
+  .speed-label {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .sidebar { display: flex; flex-direction: column; gap: 20px; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  .panel-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-head-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 6px var(--accent2);
+  }
+
+  .panel-body { padding: 16px 18px; }
+
+  .key-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .key-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .key-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .key-chip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    font-family: monospace;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  .status-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .status-line:last-child { border-bottom: none; }
+  .status-key { color: var(--muted); letter-spacing: 1px; }
+  .status-val { color: var(--text); font-weight: 700; }
+  .status-val.on { color: var(--green); }
+  .status-val.off { color: var(--red); }
+
+  .save-slots {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .save-slot {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .save-slot:hover {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(124,58,237,0.1);
+  }
+
+  .save-slot .slot-num {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: var(--text);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .game-badge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--panel);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .game-icon {
+    font-size: 28px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(124,58,237,0.15);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .game-info { flex: 1; min-width: 0; }
+
+  .game-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .game-type {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--accent2);
+    text-transform: uppercase;
+  }
+
+  .no-game {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-align: center;
+    padding: 8px;
+    letter-spacing: 1px;
+  }
+
+  footer {
+    position: relative;
+    z-index: 10;
+    text-align: center;
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-top: 20px;
+  }
+
+  .loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    z-index: 100;
+    display: none;
+  }
+
+  .loading-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--accent2);
+    text-shadow: 0 0 10px var(--glow);
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; }
+    header { padding: 14px 20px; }
+    .logo { font-size: 9px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">GBA<span>emu</span></div>
+  <div class="header-badge">Game Boy Advance</div>
+</header>
+
+<div class="main">
+  <div>
+    <div class="screen-wrap">
+      <div class="screen-header">
+        <div class="dot r"></div>
+        <div class="dot y"></div>
+        <div class="dot g"></div>
+        <div class="screen-title" id="screen-title">No ROM Loaded</div>
+      </div>
+
+      <div class="emulator-container">
+        <div id="game-container"></div>
+
+        <div class="drop-zone" id="drop-zone">
+          <div class="drop-icon">&#127918;</div>
+          <div class="drop-title">DROP ROM HERE</div>
+          <div class="drop-sub">or click to browse</div>
+          <button class="drop-btn" onclick="document.getElementById('file-input').click()">
+            Load ROM File
+          </button>
+          <div class="drop-sub" style="font-size:12px">Supports .gba .gbc .gb .nes .snes</div>
+        </div>
+
+        <div class="loading-overlay" id="loading-overlay">
+          <div style="font-size:32px">&#9889;</div>
+          <div class="loading-text">LOADING ROM...</div>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <button class="ctrl-btn" onclick="toggleFullscreen()">&#9974; Fullscreen</button>
+        <button class="ctrl-btn" onclick="saveState()">&#128190; Save State</button>
+        <button class="ctrl-btn" onclick="loadState()">&#128194; Load State</button>
+        <button class="ctrl-btn" onclick="resetGame()">&#8634; Reset</button>
+        <button class="ctrl-btn" onclick="document.getElementById('file-input').click()">&#128193; Load ROM</button>
+        <span class="speed-label" id="fps-display">&mdash; FPS</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="panel">
+      <div class="panel-head"><div class="panel-head-dot"></div>Current Game</div>
+      <div class="panel-body">
+        <div id="game-badge-wrap">
+          <div class="no-game">No game loaded</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><div class="panel-head-dot"></div>System Status</div>
+      <div class="panel-body">
+        <div class="status-line">
+          <span class="status-key">CORE</span>
+          <span class="status-val" id="status-core">&mdash;</span>
+        </div>
+        <div class="status-line">
+          <span class="status-key">EMULATOR</span>
+          <span class="status-val on">EmulatorJS</span>
+        </div>
+        <div class="status-line">
+          <span class="status-key">AUDIO</span>
+          <span class="status-val" id="status-audio">&mdash;</span>
+        </div>
+        <div class="status-line">
+          <span class="status-key">SAVE RAM</span>
+          <span class="status-val" id="status-save">&mdash;</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><div class="panel-head-dot"></div>Controls</div>
+      <div class="panel-body">
+        <div class="key-grid">
+          <div class="key-row">
+            <span class="key-label">D-Pad</span>
+            <span class="key-chip">Arrow Keys</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">A</span>
+            <span class="key-chip">Z</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">B</span>
+            <span class="key-chip">X</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">L</span>
+            <span class="key-chip">A</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">R</span>
+            <span class="key-chip">S</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">Start</span>
+            <span class="key-chip">Enter</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">Select</span>
+            <span class="key-chip">Shift</span>
+          </div>
+          <div class="key-row">
+            <span class="key-label">Save St.</span>
+            <span class="key-chip">F1-F8</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><div class="panel-head-dot"></div>Quick Saves</div>
+      <div class="panel-body">
+        <div class="save-slots">
+          <div class="save-slot" onclick="saveToSlot(1)"><span class="slot-num">1</span>Save</div>
+          <div class="save-slot" onclick="saveToSlot(2)"><span class="slot-num">2</span>Save</div>
+          <div class="save-slot" onclick="saveToSlot(3)"><span class="slot-num">3</span>Save</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>GBAemu &middot; Powered by EmulatorJS &middot; All game files remain local in your browser</footer>
+
+<input type="file" id="file-input" accept=".gba,.gbc,.gb,.nes,.sfc,.smc,.n64,.z64,.nds,.pce" />
+
+<script>
+  let emulatorLoaded = false;
+  let currentRom = null;
+  let currentSystem = null;
+  let fpsRafId = null;
+
+  const fileInput = document.getElementById('file-input');
+  const dropZone = document.getElementById('drop-zone');
+
+  const systemMap = {
+    gba: { core: 'mgba', name: 'Game Boy Advance', icon: '&#127918;' },
+    gbc: { core: 'gambatte', name: 'Game Boy Color', icon: '&#128994;' },
+    gb:  { core: 'gambatte', name: 'Game Boy', icon: '&#11035;' },
+    nes: { core: 'fceumm', name: 'NES', icon: '&#128377;' },
+    sfc: { core: 'snes9x', name: 'SNES', icon: '&#127919;' },
+    smc: { core: 'snes9x', name: 'SNES', icon: '&#127919;' },
+    n64: { core: 'mupen64plus_next', name: 'Nintendo 64', icon: '&#128311;' },
+    z64: { core: 'mupen64plus_next', name: 'Nintendo 64', icon: '&#128311;' },
+    nds: { core: 'melonds', name: 'Nintendo DS', icon: '&#128223;' },
+    pce: { core: 'mednafen_pce', name: 'PC Engine', icon: '&#128252;' },
+  };
+
+  function getExtension(filename) {
+    return filename.split('.').pop().toLowerCase();
+  }
+
+  function cleanupEmulator() {
+    // Cancel FPS counter
+    if (fpsRafId) {
+      cancelAnimationFrame(fpsRafId);
+      fpsRafId = null;
+    }
+
+    // Try to destroy existing emulator instance
+    try {
+      if (window.EJS_emulator && typeof window.EJS_emulator.destroy === 'function') {
+        window.EJS_emulator.destroy();
+      }
+    } catch(e) { /* ignore */ }
+
+    // Remove old script
+    const old = document.getElementById('ejs-script');
+    if (old) old.remove();
+
+    // Nuke the container and recreate it
+    const container = document.getElementById('game-container');
+    const parent = container.parentNode;
+    const newContainer = document.createElement('div');
+    newContainer.id = 'game-container';
+    newContainer.style.width = '100%';
+    newContainer.style.minHeight = '480px';
+    parent.replaceChild(newContainer, container);
+
+    // Clear all EJS globals
+    delete window.EJS_player;
+    delete window.EJS_gameUrl;
+    delete window.EJS_core;
+    delete window.EJS_pathtodata;
+    delete window.EJS_startOnLoaded;
+    delete window.EJS_color;
+    delete window.EJS_volume;
+    delete window.EJS_onGameStart;
+    delete window.EJS_emulator;
+
+    emulatorLoaded = false;
+  }
+
+  function loadROM(file) {
+    const ext = getExtension(file.name);
+    const sys = systemMap[ext];
+    if (!sys) {
+      showToast('Unsupported file format: .' + ext);
+      return;
+    }
+
+    currentRom = file;
+    currentSystem = sys;
+
+    // Update UI
+    dropZone.style.display = 'none';
+    document.getElementById('screen-title').textContent = file.name;
+    document.getElementById('status-core').textContent = sys.core;
+    document.getElementById('status-core').className = 'status-val on';
+    document.getElementById('status-audio').textContent = 'Enabled';
+    document.getElementById('status-audio').className = 'status-val on';
+    document.getElementById('status-save').textContent = 'IndexedDB';
+    document.getElementById('status-save').className = 'status-val on';
+
+    document.getElementById('game-badge-wrap').innerHTML =
+      '<div class="game-badge">' +
+        '<div class="game-icon">' + sys.icon + '</div>' +
+        '<div class="game-info">' +
+          '<div class="game-name">' + file.name.replace(/\.[^/.]+$/, '') + '</div>' +
+          '<div class="game-type">' + sys.name + '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Full cleanup of previous emulator
+    cleanupEmulator();
+
+    // Show loading
+    document.getElementById('loading-overlay').style.display = 'flex';
+
+    // Read ROM as blob URL
+    const url = URL.createObjectURL(file);
+
+    // Set EmulatorJS globals
+    window.EJS_player = '#game-container';
+    window.EJS_gameUrl = url;
+    window.EJS_core = sys.core;
+    window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+    window.EJS_startOnLoaded = true;
+    window.EJS_color = '#7c3aed';
+    window.EJS_volume = 0.8;
+
+    window.EJS_onGameStart = function() {
+      document.getElementById('loading-overlay').style.display = 'none';
+      emulatorLoaded = true;
+    };
+
+    // Load EmulatorJS script
+    const script = document.createElement('script');
+    script.id = 'ejs-script';
+    script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
+    document.body.appendChild(script);
+
+    script.onerror = function() {
+      document.getElementById('loading-overlay').style.display = 'none';
+      dropZone.style.display = 'flex';
+      showToast('Failed to load EmulatorJS. Check your connection.');
+    };
+
+    // Safety timeout: if game doesn't start in 30s, hide loading
+    setTimeout(function() {
+      if (!emulatorLoaded) {
+        document.getElementById('loading-overlay').style.display = 'none';
+      }
+    }, 30000);
+
+    // Start FPS counter
+    startFPSCounter();
+  }
+
+  function startFPSCounter() {
+    if (fpsRafId) {
+      cancelAnimationFrame(fpsRafId);
+      fpsRafId = null;
+    }
+    let frames = 0;
+    let last = performance.now();
+    function tick() {
+      frames++;
+      const now = performance.now();
+      if (now - last >= 1000) {
+        document.getElementById('fps-display').textContent = frames + ' FPS';
+        frames = 0;
+        last = now;
+      }
+      fpsRafId = requestAnimationFrame(tick);
+    }
+    fpsRafId = requestAnimationFrame(tick);
+  }
+
+  function toggleFullscreen() {
+    const el = document.querySelector('.emulator-container');
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+  }
+
+  function getEmulator() {
+    // EmulatorJS stable exposes the instance on window.EJS_emulator
+    return window.EJS_emulator || null;
+  }
+
+  function saveState() {
+    const emu = getEmulator();
+    if (emu && typeof emu.saveState === 'function') {
+      emu.saveState();
+      showToast('State saved');
+    } else {
+      showToast('Load a game first!');
+    }
+  }
+
+  function loadState() {
+    const emu = getEmulator();
+    if (emu && typeof emu.loadState === 'function') {
+      emu.loadState();
+      showToast('State loaded');
+    } else {
+      showToast('Load a game first!');
+    }
+  }
+
+  function resetGame() {
+    const emu = getEmulator();
+    if (emu && typeof emu.restart === 'function') {
+      emu.restart();
+      showToast('Game reset');
+    } else if (currentRom) {
+      loadROM(currentRom);
+    } else {
+      showToast('Load a game first!');
+    }
+  }
+
+  function saveToSlot(n) {
+    const emu = getEmulator();
+    if (emu && typeof emu.saveState === 'function') {
+      emu.saveState();
+      showToast('Saved to slot ' + n);
+    } else {
+      showToast('Load a game first!');
+    }
+  }
+
+  function showToast(msg) {
+    // Remove existing toast if any
+    const existing = document.getElementById('emu-toast');
+    if (existing) existing.remove();
+
+    const t = document.createElement('div');
+    t.id = 'emu-toast';
+    t.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);' +
+      'background:#7c3aed;color:white;padding:10px 24px;border-radius:8px;' +
+      'font-family:Rajdhani,sans-serif;font-weight:700;font-size:14px;' +
+      'letter-spacing:1px;z-index:10000;box-shadow:0 0 20px #7c3aed88;' +
+      'transition:opacity 0.3s;opacity:1;';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function() {
+      t.style.opacity = '0';
+      setTimeout(function() { t.remove(); }, 300);
+    }, 2000);
+  }
+
+  // File input handler
+  fileInput.addEventListener('change', function(e) {
+    if (e.target.files[0]) loadROM(e.target.files[0]);
+    // Reset input so same file can be reloaded
+    e.target.value = '';
+  });
+
+  // Drag and drop
+  dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', function() {
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    var file = e.dataTransfer.files[0];
+    if (file) loadROM(file);
+  });
+
+  dropZone.addEventListener('click', function(e) {
+    if (e.target.tagName !== 'BUTTON') {
+      fileInput.click();
+    }
+  });
+</script>
+</body>
+</html>
